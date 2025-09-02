@@ -1,0 +1,75 @@
+Guide how to install and run server:
+
+sudo apt update
+sudo apt install python3-pip libatlas-base-dev libopenjp2-7 libtiff5 -y
+pip3 install fastapi uvicorn[standard] pillow torchvision torch scikit-learn joblib opencv-python
+
+python3 main.py
+# ou
+uvicorn main:app --host 0.0.0.0 --port 8000
+
+Ótimo! Você já tem as instruções perfeitas. Vou apenas detalhar um pouco mais cada passo para garantir que tudo funcione sem problemas.
+
+### 1. Executar o Servidor no Raspberry Pi
+
+Na pasta do seu projeto (que contém `main.py`, `model_utils.py` e a pasta `static`), você tem duas ótimas opções:
+
+**Opção 1: Com Python diretamente (se o main.py inicia o servidor)**
+```bash
+python3 main.py
+```
+*Use este se o seu `main.py` já contém algo como `uvicorn.run(app)` ou `if __name__ == "__main__":`.*
+
+**Opção 2: Com Uvicorn diretamente (Recomendado para FastAPI)**
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+*Os flags adicionais são úteis:*
+- `--host 0.0.0.0` → Permite conexões de qualquer dispositivo na rede
+- `--reload` → Reinicia automaticamente o servidor quando você altera o código (ótimo para desenvolvimento)
+
+### 2. Encontrar o IP do Raspberry Pi
+
+**Método 1: Terminal (no Pi)**
+```bash
+hostname -I
+```
+Ou:
+```bash
+ip a
+```
+*Procure pelo endereço após `inet` na interface `wlan0` (Wi-Fi) ou `eth0` (cabo).*
+
+**Método 2: Interface gráfica**
+- Clique no ícone de rede no canto superior direito
+- Suas conexões de rede mostrarão o IP
+
+### 3. Conectar de Outro Dispositivo
+
+Em qualquer computador/telefone **na mesma rede**, abra o browser e digite:
+
+```
+http://[IP-DO-RASPBERRY]:8000/
+```
+
+**Exemplo:** Se o IP do Pi for `192.168.1.100`, digite:
+```
+http://192.168.1.100:8000/
+```
+
+### ⚠️ Solução de Problemas Comuns:
+
+1. **"Connection refused"** → Verifique se:
+   - O servidor está realmente rodando no Pi
+   - Você usou `--host 0.0.0.0`
+   - A porta 8000 não está bloqueada pelo firewall
+
+2. **Página não carrega** → Verifique se:
+   - Ambos dispositivos estão na mesma rede Wi-Fi
+   - Você digitou o IP correto do Raspberry Pi
+
+3. **Para acesso externo** (fora da rede local):
+   - Você precisará configurar *port forwarding* no roteador
+   - E possivelmente usar um serviço como DuckDNS ou No-IP
+
+Precisa de ajuda com algum passo específico?
