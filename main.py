@@ -1,42 +1,50 @@
 import os
-import time
-import threading
+import joblib
 import torch
 import torch.nn as nn
-from torchvision import transforms, models
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from torchvision import models, transforms
+from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+import pandas as pd
 from PIL import Image
-import numpy as np
-import joblib
 
-# =======================
-# CONFIGURAÇÕES
-# =======================
+# ======================
+# CONFIG
+# ======================
 MODEL_PATH = "pollution_model.pth"
 SCALER_PATH = "scaler.pkl"
-IMG_PATH = "static/image.jpg"
-CAPTURE_INTERVAL = 5
+DATA_DIR = "data"
+CSV_PATH = os.path.join(DATA_DIR, "sensor_data.csv")
+IMG_DIR = os.path.join(DATA_DIR, "images")
 
-# Classes reais (iguais às do treino!)
-class_names = ["Good", "Moderate", "Unhealthy"]
+os.makedirs(IMG_DIR, exist_ok=True)
+if not os.path.exists(CSV_PATH):
+    pd.DataFrame(columns=["pm25", "co", "co2", "image_name"]).to_csv(CSV_PATH, index=False)
 
-# =======================
-# MODELO
-# =======================
+# ======================
+# FastAPI setup
+# ======================
+app = FastAPI()
+app.mount("/images", StaticFiles(directory=IMG_DIR), name="images")
+
+# ======================
+# Modelo
+# ======================
 class PollutionModel(nn.Module):
     def __init__(self, num_classes, sensor_input_dim=3):
         super(PollutionModel, self).__init__()
-        self.cnn = models.resnet18(pretrained=False)
+        self.cnn = models.resnet18(weights=None)
         in_features = self.cnn.fc.in_features
         self.cnn.fc = nn.Identity()
+
         self.sensor_fc = nn.Sequential(
             nn.Linear(sensor_input_dim, 16),
             nn.ReLU(),
             nn.Linear(16, 32),
             nn.ReLU()
         )
+
         self.fc = nn.Sequential(
             nn.Linear(in_features + 32, 128),
             nn.ReLU(),
@@ -47,133 +55,93 @@ class PollutionModel(nn.Module):
         img_feat = self.cnn(img)
         sensor_feat = self.sensor_fc(sensors)
         combined = torch.cat((img_feat, sensor_feat), dim=1)
-        out = self.fc(combined)
-        return out
+        return self.fc(combined)
 
-# =======================
-# CARREGAR MODELO E SCALER
-# =======================
+# carregar modelo e scaler
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-model = PollutionModel(num_classes=len(class_names))
+scaler = joblib.load(SCALER_PATH)
+model = PollutionModel(num_classes=3)  # ajusta ao teu treino
 model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
 model.to(device)
 model.eval()
 
-# Scaler para normalizar sensores
-scaler = joblib.load(SCALER_PATH)
-
-# Transform da imagem
+# transform para imagens
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
 ])
 
-# =======================
-# INFERÊNCIA
-# =======================
-def run_inference(img_path, sensors, mode="multimodal"):
-    """
-    img_path: caminho da imagem
-    sensors: lista com [pm25, co, co2] brutos (não normalizados)
-    mode: "image_only" ou "multimodal"
-    """
-    img = Image.open(img_path).convert("RGB")
-    img_tensor = transform(img).unsqueeze(0).to(device)
+# ======================
+# Endpoints
+# ======================
+
+@app.get("/", response_class=HTMLResponse)
+def index():
+    with open("index.html", "r", encoding="utf-8") as f:
+        return f.read()
+
+@app.post("/upload")
+async def upload_data(
+    pm25: float = Form(...),
+    co: float = Form(...),
+    co2: float = Form(...),
+    mode: str = Form("multimodal"),
+    image: UploadFile = File(...)
+):
+    """Recebe dados do Raspberry Pi"""
+    img_name = f"img_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+    img_path = os.path.join(IMG_DIR, img_name)
+    
+    # guardar imagem
+    with open(img_path, "wb") as f:
+        f.write(await image.read())
+
+    # atualizar CSV
+    df = pd.read_csv(CSV_PATH)
+    new_row = {"pm25": pm25, "co": co, "co2": co2, "image_name": img_name}
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    df.to_csv(CSV_PATH, index=False)
+
+    # preparar inputs
+    image = Image.open(img_path).convert("RGB")
+    image = transform(image).unsqueeze(0).to(device)
 
     if mode == "multimodal":
-        sensors_norm = scaler.transform([sensors])[0]  # normalizar
+        sensors = scaler.transform([[pm25, co, co2]])
+        sensors_tensor = torch.tensor(sensors, dtype=torch.float32).to(device)
     else:
-        sensors_norm = [0, 0, 0]  # "imagem apenas" -> ignora sensores
+        sensors_tensor = torch.zeros((1, 3), dtype=torch.float32).to(device)
 
-    sensors_tensor = torch.tensor(sensors_norm, dtype=torch.float32).unsqueeze(0).to(device)
-
+    # inferência
     with torch.no_grad():
-        outputs = model(img_tensor, sensors_tensor)
-        _, predicted = torch.max(outputs, 1)
+        output = model(image, sensors_tensor)
+        predicted_class = torch.argmax(output, 1).item()
 
-    result = {
-        "prediction": class_names[predicted.item()],
-        "mode": mode,
-        "sensors_used": sensors if mode == "multimodal" else None
+    return {
+        "status": "ok",
+        "prediction": int(predicted_class),
+        "image_url": f"/images/{img_name}"
     }
-    return result
-
-# =======================
-# FASTAPI
-# =======================
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-capture_thread = None
-running = False
-latest_report = {}
-
-# Dummy sensor read (substitui isto por leitura real do Arduino)
-def read_sensors():
-    pm25 = np.random.uniform(5, 60)
-    co = np.random.uniform(0.1, 5)
-    co2 = np.random.uniform(400, 2000)
-    return [pm25, co, co2]
-
-def capture_loop(interval, mode):
-    global running, latest_report
-    while running:
-        # Capturar imagem (simulação: usa sempre a mesma)
-        img_path = IMG_PATH
-
-        if mode == "multimodal":
-            sensors = read_sensors()
-        else:
-            sensors = [0, 0, 0]
-
-        result = run_inference(img_path, sensors, mode)
-        latest_report = {"report": result}
-        time.sleep(interval)
-
-@app.post("/start_capture")
-async def start_capture(request: Request):
-    global running, capture_thread
-    if running:
-        return {"status": "already_running"}
-    body = await request.json()
-    interval = body.get("interval", CAPTURE_INTERVAL)
-    mode = body.get("mode", "multimodal")
-    running = True
-    capture_thread = threading.Thread(target=capture_loop, args=(interval, mode), daemon=True)
-    capture_thread.start()
-    return {"status": "started", "mode": mode}
-
-@app.post("/stop_capture")
-async def stop_capture():
-    global running
-    running = False
-    return {"status": "stopped"}
 
 @app.get("/latest")
-async def get_latest():
-    return latest_report if latest_report else {"report": None}
+def get_latest():
+    """Última entrada"""
+    df = pd.read_csv(CSV_PATH)
+    if df.empty:
+        return {"status": "no data"}
+    last_row = df.iloc[-1]
+    return {
+        "pm25": float(last_row["pm25"]),
+        "co": float(last_row["co"]),
+        "co2": float(last_row["co2"]),
+        "image_url": f"/images/{last_row['image_name']}"
+    }
 
 @app.get("/image.jpg")
-async def get_image():
-    return FileResponse(IMG_PATH)
-
-@app.post("/capture")
-async def capture_once(request: Request):
-    """Captura e infere apenas uma vez"""
-    body = await request.json()
-    mode = body.get("mode", "multimodal")
-
-    if mode == "multimodal":
-        sensors = read_sensors()
-    else:
-        sensors = [0, 0, 0]
-
-    result = run_inference(IMG_PATH, sensors, mode)
-    return JSONResponse(content={"report": result})
+def get_latest_image():
+    """Imagem atual"""
+    df = pd.read_csv(CSV_PATH)
+    if df.empty:
+        return FileResponse("placeholder.jpg")
+    last_row = df.iloc[-1]
+    return FileResponse(os.path.join(IMG_DIR, last_row["image_name"]))
