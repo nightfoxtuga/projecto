@@ -1,0 +1,58 @@
+RELATÓRIO DE DADOS DE POLUIÇÃO GERADOS
+==================================================
+
+IMAGENS POR CATEGORIA:
+1_Good: 270 imagens
+2_Moderate: 376 imagens
+3_Unhealthy_For_Sensitive_Groups: 58 imagens
+4_Unhealthy: 156 imagens
+5_Very_Unhealthy: 52 imagens
+
+==================================================
+
+VALORES MÉDIOS POR CATEGORIA:
+
+1_Good:
+  CO: 0.26 ppm
+  CO2: 347.10 ppm
+  PM2_5: 5.05 μg/m³
+  PM10: 4.96 μg/m³
+  NO2: 25.59 ppb
+  O3: 26.91 ppb
+  SO2: 17.04 ppb
+
+2_Moderate:
+  CO: 0.76 ppm
+  CO2: 523.15 ppm
+  PM2_5: 29.36 μg/m³
+  PM10: 29.46 μg/m³
+  NO2: 76.63 ppb
+  O3: 62.60 ppb
+  SO2: 55.40 ppb
+
+3_Unhealthy_For_Sensitive_Groups:
+  CO: 0.76 ppm
+  CO2: 702.07 ppm
+  PM2_5: 74.22 μg/m³
+  PM10: 71.90 μg/m³
+  NO2: 234.88 ppb
+  O3: 78.24 ppb
+  SO2: 135.59 ppb
+
+4_Unhealthy:
+  CO: 2.01 ppm
+  CO2: 900.33 ppm
+  PM2_5: 150.52 μg/m³
+  PM10: 147.35 μg/m³
+  NO2: 510.86 ppb
+  O3: 95.48 ppb
+  SO2: 247.38 ppb
+
+5_Very_Unhealthy:
+  CO: 5.01 ppm
+  CO2: 1251.29 ppm
+  PM2_5: 305.68 μg/m³
+  PM10: 308.71 μg/m³
+  NO2: 956.77 ppb
+  O3: 154.63 ppb
+  SO2: 460.29 ppb
