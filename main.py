@@ -60,7 +60,7 @@ class PollutionModel(nn.Module):
 # carregar modelo e scaler
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 scaler = joblib.load(SCALER_PATH)
-model = PollutionModel(num_classes=3)  # ajusta ao teu treino
+model = PollutionModel(num_classes=5)  # ajusta ao teu treino
 model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
 model.to(device)
 model.eval()
