@@ -60,7 +60,7 @@ class PollutionModel(nn.Module):
 # carregar modelo e scaler
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 scaler = joblib.load(SCALER_PATH)
-model = PollutionModel(num_classes=5)  # ajusta ao teu treino
+model = PollutionModel(num_classes=5)  # corrigido para bater com o checkpoint
 model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
 model.to(device)
 model.eval()
@@ -77,21 +77,24 @@ transform = transforms.Compose([
 
 @app.get("/", response_class=HTMLResponse)
 def index():
+    # certifique-se que o index.html está no mesmo diretório do main.py
+    if not os.path.exists("index.html"):
+        return HTMLResponse("<h1>index.html não encontrado</h1>", status_code=404)
     with open("index.html", "r", encoding="utf-8") as f:
         return f.read()
 
 @app.post("/upload")
 async def upload_data(
-    pm25: float = Form(...),
-    co: float = Form(...),
-    co2: float = Form(...),
-    mode: str = Form("multimodal"),
-    image: UploadFile = File(...)
+        pm25: float = Form(...),
+        co: float = Form(...),
+        co2: float = Form(...),
+        mode: str = Form("multimodal"),
+        image: UploadFile = File(...)
 ):
     """Recebe dados do Raspberry Pi"""
     img_name = f"img_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.jpg"
     img_path = os.path.join(IMG_DIR, img_name)
-    
+
     # guardar imagem
     with open(img_path, "wb") as f:
         f.write(await image.read())
@@ -142,6 +145,6 @@ def get_latest_image():
     """Imagem atual"""
     df = pd.read_csv(CSV_PATH)
     if df.empty:
-        return FileResponse("placeholder.jpg")
+        return FileResponse("placeholder.jpg")  # certifique-se de ter uma imagem placeholder
     last_row = df.iloc[-1]
     return FileResponse(os.path.join(IMG_DIR, last_row["image_name"]))
