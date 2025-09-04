@@ -4,82 +4,75 @@
   <meta charset="UTF-8">
   <title>Monitor de Qualidade do Ar</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    h1 { color: #333; }
+    body { font-family: Arial; margin: 20px; }
     img { width: 400px; border: 2px solid #444; margin-top: 10px; }
-    .controls { margin: 15px 0; }
     button { padding: 10px 20px; margin-right: 10px; }
-    select { padding: 5px; margin-left: 10px; }
-    pre { background: #f4f4f4; padding: 10px; border: 1px solid #ddd; }
   </style>
 </head>
 <body>
-  <h1>Monitor de Qualidade do Ar</h1>
+<h1>Monitor de Qualidade do Ar</h1>
 
-  <div class="controls">
-    <label for="mode">Modo de inferência:</label>
-    <select id="mode">
-      <option value="multimodal">Imagem + Sensores</option>
-      <option value="image_only">Só Imagem</option>
-    </select>
-    <br><br>
-    <button onclick="startCapture()">▶ Iniciar Captura</button>
-    <button onclick="stopCapture()">⏹ Parar Captura</button>
-    <button onclick="captureOnce()">📸 Captura Única</button>
-  </div>
+<div>
+  <label for="mode">Modo:</label>
+  <select id="mode">
+    <option value="multimodal">Imagem + Sensores</option>
+    <option value="image_only">Só Imagem</option>
+  </select>
+  <br><br>
+  <button onclick="startCapture()">▶ Iniciar Captura</button>
+  <button onclick="stopCapture()">⏹ Parar Captura</button>
+  <button onclick="captureOnce()">📸 Captura Única</button>
+</div>
 
-  <h2>Imagem Atual</h2>
-  <img id="camera" src="http://127.0.0.1:8000/image.jpg?cache=0">
+<h2>Imagem Atual</h2>
+<img id="camera" src="/image.jpg?cache=0">
 
-  <h2>Último Relatório</h2>
-  <pre id="report">Ainda não há dados...</pre>
+<h2>Último Relatório</h2>
+<pre id="report">Ainda não há dados...</pre>
 
-  <script>
-    let intervalId;
+<script>
+  let intervalId;
 
-    async function startCapture() {
-      const mode = document.getElementById("mode").value;
-      await fetch("http://127.0.0.1:8000/start_capture", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ interval: 5, mode })
-      });
-      if (!intervalId) {
-        intervalId = setInterval(updateReport, 3000);
-      }
-    }
+  async function startCapture() {
+    const mode = document.getElementById("mode").value;
+    await fetch("/start_capture", {
+      method: "POST",
+      body: new URLSearchParams({interval: 60, mode})
+    });
+    if (!intervalId) intervalId = setInterval(updateReport, 5000);
+  }
 
-    async function stopCapture() {
-      await fetch("http://127.0.0.1:8000/stop_capture", { method: "POST" });
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    }
+  async function stopCapture() {
+    await fetch("/stop_capture", {method:"POST"});
+    if (intervalId) { clearInterval(intervalId); intervalId = null; }
+  }
 
-    async function captureOnce() {
-      const mode = document.getElementById("mode").value;
-      const res = await fetch("http://127.0.0.1:8000/capture", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode })
-      });
-      const data = await res.json();
-      document.getElementById("report").textContent = JSON.stringify(data, null, 2);
-      refreshImage();
-    }
+  async function captureOnce() {
+    const mode = document.getElementById("mode").value;
+    const pm25 = 0, co = 0, co2 = 0; // temporário, o Pi envia os dados
+    const formData = new FormData();
+    formData.append("mode", mode);
+    formData.append("pm25", pm25);
+    formData.append("co", co);
+    formData.append("co2", co2);
+    // imagem só no Raspberry
+    const res = await fetch("/capture_once", {method:"POST", body: formData});
+    const data = await res.json();
+    document.getElementById("report").textContent = JSON.stringify(data, null, 2);
+    refreshImage();
+  }
 
-    async function updateReport() {
-      const res = await fetch("http://127.0.0.1:8000/latest");
-      const data = await res.json();
-      document.getElementById("report").textContent = JSON.stringify(data, null, 2);
-      refreshImage();
-    }
+  async function updateReport() {
+    const res = await fetch("/latest");
+    const data = await res.json();
+    document.getElementById("report").textContent = JSON.stringify(data, null, 2);
+    refreshImage();
+  }
 
-    function refreshImage() {
-      const img = document.getElementById("camera");
-      img.src = "http://127.0.0.1:8000/image.jpg?cache=" + new Date().getTime();
-    }
-  </script>
+  function refreshImage() {
+    document.getElementById("camera").src = "/image.jpg?cache=" + new Date().getTime();
+  }
+
+</script>
 </body>
 </html>
