@@ -6,7 +6,20 @@
   <style>
     body { font-family: Arial; margin: 20px; }
     img { width: 400px; border: 2px solid #444; margin-top: 10px; }
-    button { padding: 10px 20px; margin-right: 10px; }
+    button { padding: 10px 20px; margin-right: 10px; cursor: pointer; }
+    .status {
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 10px;
+      font-size: 18px;
+      font-weight: bold;
+      color: white;
+    }
+    .Good { background: green; }
+    .Moderate { background: orange; }
+    .Unhealthy { background: red; }
+    .Unhealthy-for-Sensitive-Groups { background: darkorange; }
+    .Hazardous { background: purple; }
   </style>
 </head>
 <body>
@@ -28,62 +41,79 @@
 <img id="camera" src="/image.jpg?cache=0">
 
 <h2>Último Relatório</h2>
-<pre id="report">Ainda não há dados...</pre>
+<div id="report">Ainda não há dados...</div>
 
 <script>
-  let intervalId;
+let intervalId;
 
-  // Atualiza imagem e relatório do backend
-  async function updateReport() {
-    try {
-      const res = await fetch("/latest");
-      const data = await res.json();
-      document.getElementById("report").textContent = JSON.stringify(data, null, 2);
-      refreshImage();
-    } catch (err) {
-      console.error("Erro ao atualizar relatório:", err);
-    }
+function showReport(data) {
+  const container = document.getElementById("report");
+  if (data.error) {
+    container.innerHTML = `<p>${data.error}</p>`;
+    return;
   }
 
-  function refreshImage() {
-    document.getElementById("camera").src = "/image.jpg?cache=" + new Date().getTime();
-  }
+  const label = data.prediction_label || "Sem dados";
+  const ts = new Date(data.timestamp).toLocaleString();
+  const cls = label.replace(/\s+/g, "-");
 
-  async function startCapture() {
-    const mode = document.getElementById("mode").value;
-    await fetch("/start_capture", {
-      method: "POST",
-      body: new URLSearchParams({interval: 60, mode})
-    });
-    if (!intervalId) intervalId = setInterval(updateReport, 5000);
-  }
+  container.innerHTML = `
+    <div class="status ${cls}">
+      Qualidade do Ar: ${label} <br>
+      <small>(${ts})</small>
+    </div>
+  `;
+}
 
-  async function stopCapture() {
-    await fetch("/stop_capture", {method:"POST"});
-    if (intervalId) { clearInterval(intervalId); intervalId = null; }
+async function updateReport() {
+  try {
+    const res = await fetch("/latest");
+    const data = await res.json();
+    showReport(data);
+    refreshImage();
+  } catch (err) {
+    console.error("Erro ao atualizar relatório:", err);
   }
+}
 
-  async function captureOnce() {
-    const mode = document.getElementById("mode").value;
-    const pm25 = 0, co = 0, co2 = 0; // temporário, o Pi envia os dados
-    const formData = new FormData();
-    formData.append("mode", mode);
-    formData.append("pm25", pm25);
-    formData.append("co", co);
-    formData.append("co2", co2);
-    // imagem só no Raspberry
-    try {
-      const res = await fetch("/capture_once", {method:"POST", body: formData});
-      const data = await res.json();
-      document.getElementById("report").textContent = JSON.stringify(data, null, 2);
-      refreshImage();
-    } catch (err) {
-      console.error("Erro ao capturar:", err);
-    }
+function refreshImage() {
+  document.getElementById("camera").src = "/image.jpg?cache=" + new Date().getTime();
+}
+
+async function startCapture() {
+  const mode = document.getElementById("mode").value;
+  await fetch("/start_capture", {
+    method: "POST",
+    body: new URLSearchParams({interval: 60, mode})
+  });
+  if (!intervalId) intervalId = setInterval(updateReport, 5000);
+}
+
+async function stopCapture() {
+  await fetch("/stop_capture", {method:"POST"});
+  if (intervalId) { clearInterval(intervalId); intervalId = null; }
+}
+
+async function captureOnce() {
+  const mode = document.getElementById("mode").value;
+  const pm25 = 0, co = 0, co2 = 0; // Raspberry envia os dados
+  const formData = new FormData();
+  formData.append("mode", mode);
+  formData.append("pm25", pm25);
+  formData.append("co", co);
+  formData.append("co2", co2);
+  try {
+    const res = await fetch("/capture_once", {method:"POST", body: formData});
+    const data = await res.json();
+    showReport(data);
+    refreshImage();
+  } catch (err) {
+    console.error("Erro ao capturar:", err);
   }
+}
 
-  // Atualiza relatório e imagem a cada 15s, mesmo sem iniciar captura
-  setInterval(updateReport, 15000);
+// Atualiza relatório e imagem a cada 5s
+setInterval(updateReport, 5000);
 </script>
 </body>
 </html>
