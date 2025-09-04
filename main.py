@@ -33,7 +33,7 @@ capture_active = False
 capture_mode = "multimodal"
 capture_interval = 60  # segundos
 
-LATEST_REPORT_FILE = "latest_report.json"
+last_report = None
 
 # =======================
 # Endpoints Frontend
@@ -45,11 +45,16 @@ async def index():
 
 @app.get("/latest")
 async def latest_report():
-    if os.path.exists(LATEST_REPORT_FILE):
-        with open(LATEST_REPORT_FILE, "r") as f:
-            report = json.load(f)
-        return JSONResponse(report)
-    return JSONResponse({"error": "Nenhum relatório disponível"})
+    if last_report is not None:
+        return JSONResponse(last_report)
+    elif os.path.exists("latest.jpg"):
+        return JSONResponse({
+            "message": "Último relatório disponível",
+            "timestamp": datetime.now().isoformat()
+        })
+    else:
+        return JSONResponse({"error": "Nenhum relatório disponível"})
+
 
 @app.get("/image.jpg")
 async def get_image():
@@ -77,6 +82,8 @@ async def stop_capture():
 @app.post("/capture_once")
 async def capture_once(mode: str = Form("multimodal"), pm25: float = Form(...),
                        co: float = Form(...), co2: float = Form(...), image: UploadFile = File(...)):
+    global last_report  # adiciona isso
+
     # processa imagem
     img_bytes = await image.read()
     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
@@ -102,9 +109,11 @@ async def capture_once(mode: str = Form("multimodal"), pm25: float = Form(...),
         "timestamp": datetime.now().isoformat(),
         "image_url": "/image.jpg"
     }
-    with open(LATEST_REPORT_FILE, "w") as f:
-        json.dump(report, f)
+
+    last_report = report  # salva para o /latest
+
     return JSONResponse(report)
+
 
 # =======================
 # Endpoint que o Raspberry consulta

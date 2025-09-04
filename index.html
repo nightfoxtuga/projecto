@@ -33,6 +33,22 @@
 <script>
   let intervalId;
 
+  // Atualiza imagem e relatório do backend
+  async function updateReport() {
+    try {
+      const res = await fetch("/latest");
+      const data = await res.json();
+      document.getElementById("report").textContent = JSON.stringify(data, null, 2);
+      refreshImage();
+    } catch (err) {
+      console.error("Erro ao atualizar relatório:", err);
+    }
+  }
+
+  function refreshImage() {
+    document.getElementById("camera").src = "/image.jpg?cache=" + new Date().getTime();
+  }
+
   async function startCapture() {
     const mode = document.getElementById("mode").value;
     await fetch("/start_capture", {
@@ -56,23 +72,18 @@
     formData.append("co", co);
     formData.append("co2", co2);
     // imagem só no Raspberry
-    const res = await fetch("/capture_once", {method:"POST", body: formData});
-    const data = await res.json();
-    document.getElementById("report").textContent = JSON.stringify(data, null, 2);
-    refreshImage();
+    try {
+      const res = await fetch("/capture_once", {method:"POST", body: formData});
+      const data = await res.json();
+      document.getElementById("report").textContent = JSON.stringify(data, null, 2);
+      refreshImage();
+    } catch (err) {
+      console.error("Erro ao capturar:", err);
+    }
   }
 
-  async function updateReport() {
-    const res = await fetch("/latest");
-    const data = await res.json();
-    document.getElementById("report").textContent = JSON.stringify(data, null, 2);
-    refreshImage();
-  }
-
-  function refreshImage() {
-    document.getElementById("camera").src = "/image.jpg?cache=" + new Date().getTime();
-  }
-
+  // Atualiza relatório e imagem a cada 15s, mesmo sem iniciar captura
+  setInterval(updateReport, 15000);
 </script>
 </body>
 </html>
