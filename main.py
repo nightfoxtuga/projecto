@@ -33,6 +33,8 @@ capture_active = False
 capture_mode = "multimodal"
 capture_interval = 60  # segundos
 
+LATEST_REPORT_FILE = "latest_report.json"
+
 # =======================
 # Endpoints Frontend
 # =======================
@@ -43,11 +45,10 @@ async def index():
 
 @app.get("/latest")
 async def latest_report():
-    if os.path.exists("latest.jpg"):
-        return JSONResponse({
-            "message": "Último relatório disponível",
-            "timestamp": datetime.now().isoformat()
-        })
+    if os.path.exists(LATEST_REPORT_FILE):
+        with open(LATEST_REPORT_FILE, "r") as f:
+            report = json.load(f)
+        return JSONResponse(report)
     return JSONResponse({"error": "Nenhum relatório disponível"})
 
 @app.get("/image.jpg")
@@ -101,6 +102,8 @@ async def capture_once(mode: str = Form("multimodal"), pm25: float = Form(...),
         "timestamp": datetime.now().isoformat(),
         "image_url": "/image.jpg"
     }
+    with open(LATEST_REPORT_FILE, "w") as f:
+        json.dump(report, f)
     return JSONResponse(report)
 
 # =======================
